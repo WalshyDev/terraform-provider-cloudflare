@@ -2,7 +2,9 @@ package sdkv2provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -91,6 +93,17 @@ func buildDeploymentConfig(environment interface{}) cloudflare.PagesProjectDeplo
 			}
 			config.R2Bindings = bindingMap
 			break
+		case "service_binding":
+			serviceMap := cloudflare.ServiceBindingMap{}
+			for _, item := range value.(*schema.Set).List() {
+				data := item.(map[string]interface{})
+				serviceMap[data["name"].(string)] = &cloudflare.ServiceBinding{
+					Service:     data["service"].(string),
+					Environment: data["environment"].(string),
+				}
+			}
+			config.ServiceBindings = serviceMap
+			break
 		case "compatibility_date":
 			config.CompatibilityDate = value.(string)
 			break
@@ -108,16 +121,18 @@ func buildDeploymentConfig(environment interface{}) cloudflare.PagesProjectDeplo
 		case "usage_model":
 			config.UsageModel = cloudflare.UsageModel(value.(string))
 			break
-		case "service_binding":
-			serviceMap := cloudflare.ServiceBindingMap{}
-			for _, item := range value.(*schema.Set).List() {
-				data := item.(map[string]interface{})
-				serviceMap[data["name"].(string)] = &cloudflare.ServiceBinding{
-					Service:     data["service"].(string),
-					Environment: data["environment"].(string),
-				}
+		case "placement":
+			parsed := value.([]interface{})
+			placement := parsed[0].(map[string]interface{})
+
+			placementMode := placement["mode"].(string)
+			if placementMode == "off" {
+				placementMode = ""
 			}
-			config.ServiceBindings = serviceMap
+
+			config.Placement = &cloudflare.Placement{
+				Mode: cloudflare.PlacementMode(placementMode),
+			}
 			break
 		}
 	}
@@ -183,6 +198,14 @@ func parseDeploymentConfig(deployment cloudflare.PagesProjectDeploymentConfigEnv
 		})
 	}
 	config["service_binding"] = serviceBindings
+
+	// The API doesn't accept "off" as a value but, this is user-facing and we should provide a nice API
+	// This is inline with Wrangler too.
+	placement := deployment.Placement
+	if placement != nil && placement.Mode == "off" {
+		placement.Mode = cloudflare.PlacementModeOff
+	}
+	config["placement"] = placement
 
 	returnValue = append(returnValue, config)
 	return
@@ -265,6 +288,15 @@ func buildPagesProject(d *schema.ResourceData) cloudflare.PagesProject {
 	if productionConfig, ok := d.GetOk("deployment_configs.0.production.0"); ok {
 		project.DeploymentConfigs.Production = buildDeploymentConfig(productionConfig)
 	}
+
+	fmt.Println("built project:")
+	// fmt.Printf("%v", project)
+	blob, err := json.Marshal(project)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(string(blob))
 
 	return project
 }

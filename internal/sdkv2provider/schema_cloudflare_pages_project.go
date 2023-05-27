@@ -186,6 +186,21 @@ func resourceCloudflarePagesProjectSchema() map[string]*schema.Schema {
 				ValidateFunc: validation.StringInSlice([]string{"unbound", "bundled"}, false),
 				Default:      "bundled",
 			},
+			"placement": {
+				Type:        schema.TypeList,
+				MaxItems:    1,
+				Optional:    true,
+				Description: "Configuration for placement in the Cloudflare Pages project.",
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"mode": {
+							Description: "Placement Mode for the Pages Function.",
+							Type:        schema.TypeString,
+							Optional:    true,
+						},
+					},
+				},
+			},
 		},
 	}
 
